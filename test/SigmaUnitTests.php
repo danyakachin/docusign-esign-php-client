@@ -11,6 +11,9 @@ use DocuSign\eSign\Api\FoldersApi;
 use DocuSign\eSign\Api\GroupsApi;
 use DocuSign\eSign\Api\TemplatesApi;
 use DocuSign\eSign\Api\UsersApi;
+use DocuSign\eSign\Api\EnvelopesApi\ListStatusOptions;
+use DocuSign\eSign\Api\BillingApi;
+use DocuSign\eSign\Api\SigningGroupsApi;
 use DocuSign\eSign\Client\ApiClient;
 use DocuSign\eSign\Configuration;
 use DocuSign\eSign\Model\AccountInformation;
@@ -53,13 +56,28 @@ use DocuSign\eSign\Model\Text;
 use DocuSign\eSign\Model\ModelList;
 use DocuSign\eSign\Model\TemplateRecipients;
 use DocuSign\eSign\Model\RecipientsUpdateSummary;
+use DocuSign\eSign\Model\EnvelopeIdsRequest;
+use DocuSign\eSign\Model\AccountBillingPlanResponse;
+use DocuSign\eSign\Model\DocumentFieldsInformation;
+use DocuSign\eSign\Model\SigningGroupInformation;
+use DocuSign\eSign\Model\TemplateDocumentsResult;
+use DocuSign\eSign\Model\Notification;
+use DocuSign\eSign\Model\BrandsResponse;
+use DocuSign\eSign\Model\EnvelopesInformation;
+use DocuSign\eSign\Model\EnvelopeDocumentsResult;
+use DocuSign\eSign\Model\TextCustomField;
+use DocuSign\eSign\Model\CustomFields;
+use DocuSign\eSign\Model\ReturnUrlRequest;
+use DocuSign\eSign\Model\CorrectViewRequest;
+use DocuSign\eSign\Model\FoldersRequest;
+use DocuSign\eSign\Model\BillingChargeResponse;
 use PHPUnit\Framework\TestCase;
 use DocuSign\eSign\TestConfig;
 
-class AnyaUnitTests extends TestCase
+class SigmaUnitTests extends TestCase
 {
 
-    /*
+    /**
 	 * Test 0 - login
 	 */
     public function testLogin()
@@ -548,9 +566,9 @@ class AnyaUnitTests extends TestCase
      */
     public function testGetGroups($testConfig)
     {
-        $foldersApi = new GroupsApi($testConfig->getApiClient());
+        $groupsApi = new GroupsApi($testConfig->getApiClient());
 
-        $groupInformation = $foldersApi->listGroups($testConfig->getAccountId());
+        $groupInformation = $groupsApi->listGroups($testConfig->getAccountId());
 
         $this->assertNotEmpty($groupInformation);
         $this->assertNotEmpty($groupInformation->getGroups());
@@ -889,6 +907,387 @@ class AnyaUnitTests extends TestCase
 
         // recipient was deleted 
         $this->assertEquals($totalRecipients - 1, $totalRecipientsAfterDelete);
+    }
+
+    /**
+     * @depends testLogin
+     */
+    public function testGetBilingPlan($testConfig)
+    {
+        $billingApi = new BillingApi($testConfig->getApiClient());
+        $billingPlan = $billingApi->getPlan($testConfig->getAccountId());
+
+        $this->assertNotEmpty($billingPlan);
+        $this->assertInstanceOf(AccountBillingPlanResponse::class, $billingPlan);
+        $this->assertNotEmpty($billingPlan->getPaymentMethod());
+    }
+
+    /**
+     * @depends testSignatureRequestOnDocument
+     */
+    public function testListDocumentFields($testConfig)
+    {
+        $envelopesApi = new EnvelopesApi($testConfig->getApiClient());
+        $documentFields = $envelopesApi->listDocumentFields((string) $testConfig->getAccountId(), (string) 1, (string) $testConfig->getEnvelopeId());
+
+        $this->assertNotEmpty($documentFields);
+        $this->assertInstanceOf(DocumentFieldsInformation::class, $documentFields);
+    }
+    
+    /**
+     * @depends testLogin
+     */
+    public function testSigningGroupsApiCallList($testConfig)
+    {
+        $signingGroupsApi = new SigningGroupsApi($testConfig->getApiClient());
+        $signingGroups = $signingGroupsApi->callList($testConfig->getAccountId());
+        
+        $this->assertNotEmpty($signingGroups);
+        $this->assertInstanceOf(SigningGroupInformation::class, $signingGroups);
+    }
+
+    /**
+     * @depends testLogin
+     */
+    public function testlistDocuments($testConfig)
+    {
+        $templatesApi = new TemplatesApi($testConfig->getApiClient());
+        $templateDocuments = $templatesApi->listDocuments($testConfig->getAccountId(), $testConfig->getTemplateId());
+        
+        $this->assertNotEmpty($templateDocuments);
+        $this->assertInstanceOf(TemplateDocumentsResult::class, $templateDocuments);
+        $this->assertNotEmpty($templateDocuments->getTemplateId());
+    }
+    
+    /**
+     * @depends testSignatureRequestOnDocument
+     */
+    public function testGetNotificationSettings($testConfig)
+    {
+        $envelopesApi = new EnvelopesApi($testConfig->getApiClient());
+        $notificationSettings = $envelopesApi->getNotificationSettings($testConfig->getAccountId(), $testConfig->getEnvelopeId());
+        
+        $this->assertNotEmpty($notificationSettings);
+        $this->assertInstanceOf(Notification::class, $notificationSettings);
+    }
+
+    /**
+     * @depends testLogin
+     */
+    public function testTemplatesApiGetDocument($testConfig)
+    {
+        $templatesApi = new TemplatesApi($testConfig->getApiClient());
+        $document = $templatesApi->getDocument($testConfig->getAccountId(), (string) 1, $testConfig->getTemplateId());
+
+        $this->assertNotEmpty($document);
+        $this->assertInstanceOf(\SplFileObject::class, $document);
+    }
+
+    /**
+     * @depends testLogin
+     */
+    public function testListBrands($testConfig)
+    {
+        $accountsApi = new AccountsApi($testConfig->getApiClient());
+        $brands = $accountsApi->listBrands($testConfig->getAccountId());
+
+        $this->assertNotEmpty($brands);
+        $this->assertInstanceOf(BrandsResponse::class, $brands);
+        $this->assertNotEmpty($brands->getSenderBrandIdDefault());
+    }
+
+    /**
+     * @depends testSignatureRequestOnDocument
+     */
+    public function testGetDocumentTabs($testConfig)
+    {
+        $envelopesApi = new EnvelopesApi($testConfig->getApiClient());
+        $documentTabs = $envelopesApi->getDocumentTabs($testConfig->getAccountId(), (string) 1, $testConfig->getEnvelopeId());
+
+        $this->assertNotEmpty($documentTabs);
+        $this->assertInstanceOf(Tabs::class, $documentTabs);
+    }
+
+    /**
+     * @depends testLogin
+     */
+    public function testGetBillingCharges($testConfig)
+    {
+        $accountsApi = new AccountsApi($testConfig->getApiClient());
+        $billingCharges = $accountsApi->getBillingCharges($testConfig->getAccountId());
+
+        $this->assertNotEmpty($billingCharges);
+        $this->assertInstanceOf(BillingChargeResponse::class, $billingCharges);
+    }
+
+    /**
+     * @depends testSignatureRequestOnDocument
+     */
+    public function testDeleteRecipients($testConfig)
+    {
+        $envelopesApi = new EnvelopesApi($testConfig->getApiClient());
+        $recipientsBeforeDelete = $envelopesApi->listRecipients($testConfig->getAccountId(), $testConfig->getEnvelopeId());
+
+        $result = $envelopesApi->deleteRecipients($testConfig->getAccountId(), $testConfig->getEnvelopeId(), $recipientsBeforeDelete);
+        $this->assertNotEmpty($result);
+        $this->assertInstanceOf(Recipients::class, $result);
+
+        // recipients after delete
+        $recipientsAfterDelete = $envelopesApi->listRecipients($testConfig->getAccountId(), $testConfig->getEnvelopeId());
+        $this->assertEquals(0, $recipientsAfterDelete->getRecipientCount());
+    }
+
+    /**
+     * @depends testSignatureRequestOnDocument
+     * @expectedException \DocuSign\eSign\Client\ApiException
+     * @expectedExceptionMessage The document specified was not found.
+     */
+    public function testDeleteDocuments($testConfig)
+    {
+        $envelopesApi = new EnvelopesApi($testConfig->getApiClient());
+
+        // create new document
+        $documentFileName = "/Docs/SignTest1.pdf";
+        $documentName = "SignTest1.docx";
+        $documentId = '66';
+        $document = new Document();
+        $document->setDocumentBase64(base64_encode(file_get_contents(__DIR__ . $documentFileName)));
+        $document->setName($documentName);
+        $document->setDocumentId($documentId);
+        $envelopeDefinition = new EnvelopeDefinition();
+        $envelopeDefinition->setDocuments([$document]);
+
+        // add new document to envelope
+        $envelopesApi->updateDocuments($testConfig->getAccountId(), $testConfig->getEnvelopeId(), $envelopeDefinition);
+
+        // delete this document
+        $result = $envelopesApi->deleteDocuments($testConfig->getAccountId(), $testConfig->getEnvelopeId(), $envelopeDefinition);
+        $this->assertNotEmpty($result);
+        $this->assertInstanceOf(EnvelopeDocumentsResult::class, $result);
+        
+        // document does not exist after delete 
+        $envelopesApi->getDocument($testConfig->getAccountId(), $documentId, $testConfig->getEnvelopeId());
+    }
+
+    /**
+     * @depends testSignatureRequestOnDocument
+     */
+    public function testCreateCustomFields($testConfig)
+    {
+        $envelopesApi = new EnvelopesApi($testConfig->getApiClient());
+
+        // new text custom field
+        $customFieldName = 'new custom field';
+        $customFieldValue = '7654321';
+        $customField = new TextCustomField([
+            'name' => $customFieldName,
+            'required' => 'false',
+            'show' => 'true', # Yes, include in the CoC
+            'value' => $customFieldValue
+        ]);
+        $customFields = new CustomFields();
+        $customFields->setTextCustomFields([$customField]);
+
+        // add new custom field
+        $result = $envelopesApi->createCustomFields($testConfig->getAccountId(), $testConfig->getEnvelopeId(), $customFields);
+        $this->assertNotEmpty($result);
+        $this->assertInstanceOf(CustomFields::class, $result);
+
+        // check that custom field was added
+        $customFieldsAfterCreation = $envelopesApi->listCustomFields($testConfig->getAccountId(), $testConfig->getEnvelopeId());
+        $textCustomFields = $customFieldsAfterCreation->getTextCustomFields();
+
+        $this->assertEquals($customFieldName, $textCustomFields[0]->getName());
+        $this->assertEquals($customFieldValue, $textCustomFields[0]->getValue());
+    }
+
+    /**
+     * @depends testSignatureRequestOnDocument
+     */
+    public function testCreateEditView($testConfig)
+    {
+        $envelopesApi = new EnvelopesApi($testConfig->getApiClient());
+        $viewRequest = new ReturnUrlRequest();
+        $viewRequest->setReturnUrl('https://www.google.com/');
+        
+        $result = $envelopesApi->createEditView($testConfig->getAccountId(), $testConfig->getEnvelopeId(), $viewRequest);
+        
+        $this->assertNotEmpty($result);
+        $this->assertInstanceOf(ViewUrl::class, $result);
+    }
+    
+    /**
+     * @depends testSignatureRequestOnDocument
+     */
+    public function testCreateCorrectView($testConfig)
+    {
+        $envelopesApi = new EnvelopesApi($testConfig->getApiClient());
+        $viewRequest = new CorrectViewRequest();
+        $viewRequest->setReturnUrl('https://www.google.com/');
+        $viewRequest->setViewUrl('https://www.google.com/');
+
+        $result = $envelopesApi->createCorrectView($testConfig->getAccountId(), $testConfig->getEnvelopeId(), $viewRequest);
+        
+        $this->assertNotEmpty($result);
+        $this->assertInstanceOf(ViewUrl::class, $result);
+    }
+
+    /**
+     * @depends testLogin
+     */
+    public function testTemplatesApiCreateEditView($testConfig)
+    {
+        $templatesApi = new TemplatesApi($testConfig->getApiClient());
+        $returnUrlRequest = new ReturnUrlRequest();
+        $returnUrlRequest->setReturnUrl('https://www.google.com/');
+
+        $result = $templatesApi->createEditView($testConfig->getAccountId(), $testConfig->getTemplateId(), $returnUrlRequest);
+
+        $this->assertNotEmpty($result);
+        $this->assertInstanceOf(ViewUrl::class, $result);
+    }
+
+    /**
+     * @depends testLogin
+     */
+    public function testUpdateDocuments($testConfig)
+    {
+        $templatesApi = new TemplatesApi($testConfig->getApiClient());
+        
+        // create new document
+        $documentFileName = "/Docs/SignTest1.pdf";
+        $documentName = "SignTest1.docx";
+        $documentId = '66';
+        $document = new Document();
+        $document->setDocumentBase64(base64_encode(file_get_contents(__DIR__ . $documentFileName)));
+        $document->setName($documentName);
+        $document->setDocumentId($documentId);
+        $envelopeDefinition = new EnvelopeDefinition();
+        $envelopeDefinition->setDocuments([$document]);
+
+        // add new document to template
+        $result = $templatesApi->updateDocuments($testConfig->getAccountId(), $testConfig->getTemplateId(), $envelopeDefinition);
+        $this->assertNotEmpty($result);
+        $this->assertInstanceOf(TemplateDocumentsResult::class, $result);
+
+        // get newly added document
+        $addedDocument = $templatesApi->getDocument($testConfig->getAccountId(), $documentId, $testConfig->getTemplateId());
+        $this->assertNotEmpty($addedDocument);
+        $this->assertInstanceOf(\SplFileObject::class, $addedDocument);
+    }
+
+    /**
+     * @depends testLogin
+     */
+    public function testUpdateGroupShare($testConfig)
+    {
+        $templatesApi = new TemplatesApi($testConfig->getApiClient());
+        $groupsApi = new GroupsApi($testConfig->getApiClient());
+        $groupInformation = $groupsApi->listGroups($testConfig->getAccountId());
+        
+        // share template with group
+        $result = $templatesApi->updateGroupShare($testConfig->getAccountId(), $testConfig->getTemplateId(), 'groups', $groupInformation);
+        $this->assertNotEmpty($result);
+        $this->assertInstanceOf(GroupInformation::class, $result);
+        
+        // template became shared
+        $templatesApi = new TemplatesApi($testConfig->getApiClient());
+        $template = $templatesApi->get($testConfig->getAccountId(), $testConfig->getTemplateId());
+        $this->assertNotEmpty($template);
+        $this->assertInstanceOf(EnvelopeTemplate::class, $template);
+        $this->assertEquals('true', $template->getShared());
+    }
+
+    /**
+     * @depends testLogin
+     */
+    public function testUpdateRecipients($testConfig)
+    {
+        $templatesApi = new TemplatesApi($testConfig->getApiClient());
+        
+        // create new recipient
+        $signHere1 = new SignHere([
+            'name' => 'SignHereTab',
+            'x_position' => '75',
+            'y_position' => '572',
+            'tab_label' => 'SignHereTab',
+            'page_number' => '1',
+            'document_id' => '1',
+            'recipient_id' => '1'
+        ]);
+        $signer1Tabs = new Tabs;
+        $signer1Tabs->setSignHereTabs(array($signHere1));
+        $recipientName = 'Test Test';
+        $recipientEmail = 'testRecipientEmail@test.com';
+        $signer1 = new Signer([
+            'name' => $recipientName,
+            'email' => $recipientEmail,
+            'routing_order' => '1',
+            'status' => 'created',
+            'delivery_method' => 'Email',
+            'recipient_id' => '1', #represents your {RECIPIENT_ID}
+            'tabs' => $signer1Tabs,
+            'id_check_configuration_name' => 'ID Check'
+        ]);
+        $recipients = new TemplateRecipients;
+        $recipients->setSigners(array($signer1));
+
+        // update recipients
+        $response = $templatesApi->updateRecipients($testConfig->getAccountId(), $testConfig->getTemplateId(), $recipients);
+        $this->assertNotEmpty($response);
+        $this->assertInstanceOf(RecipientsUpdateSummary::class, $response);
+        
+        // get new recipients
+        $recipients = $templatesApi->listRecipients($testConfig->getAccountId(), $testConfig->getTemplateId());
+        $signers = $recipients->getSigners();
+
+        // signer is newly added recipient
+        $this->assertEquals($recipientName, $signers[0]->getName());
+        $this->assertEquals($recipientEmail, $signers[0]->getEmail());
+    }
+
+    /**
+     * @depends testSignatureRequestOnDocument
+     */
+    public function testMoveEnvelopes($testConfig)
+    {
+        $foldersApi = new FoldersApi($testConfig->getApiClient());
+        $envelopesApi = new EnvelopesApi($testConfig->getApiClient());
+        $foldersRequest = new FoldersRequest();
+        $foldersRequest->setEnvelopeIds([$testConfig->getEnvelopeId()]);
+        
+        // get envelope before voiding
+        $envelope = $envelopesApi->getEnvelope($testConfig->getAccountId(), $testConfig->getEnvelopeId());
+        $this->assertEmpty($envelope->getVoidedDateTime());
+
+        // void envelope
+        $result = $foldersApi->moveEnvelopes($testConfig->getAccountId(), 'recyclebin', $foldersRequest);
+        $this->assertNotEmpty($result);
+        $this->assertInstanceOf(FoldersResponse::class, $result);
+
+        // make shure that envelope was voided
+        $envelopeAfterVoiding = $envelopesApi->getEnvelope($testConfig->getAccountId(), $testConfig->getEnvelopeId());
+        $this->assertNotEmpty($envelopeAfterVoiding->getVoidedDateTime());
+    }
+
+    /**
+     * @depends testSignatureRequestOnDocument
+     */
+    public function testEnvelopesApiListStatus($testConfig)
+    {
+        $envelopesApi = new EnvelopesApi($testConfig->getApiClient());
+        $envelope = $envelopesApi->getEnvelope($testConfig->getAccountId(), $testConfig->getEnvelopeId());
+        $listStatusOptions = new ListStatusOptions();
+        $listStatusOptions->setEnvelopeIds($testConfig->getEnvelopeId());
+        $listStatusOptions->setTransactionIds($envelope->getTransactionId());
+
+        $envelopeIdsRequest = new EnvelopeIdsRequest();
+        $envelopeIdsRequest->setEnvelopeIds([$testConfig->getEnvelopeId()]);
+        $envelopeIdsRequest->setTransactionIds([$envelope->getTransactionId()]);
+
+        $status = $envelopesApi->listStatus($testConfig->getAccountId(), $envelopeIdsRequest, $listStatusOptions);
+        $this->assertNotEmpty($status);
+        $this->assertInstanceOf(EnvelopesInformation::class, $status);
     }
 }
 
